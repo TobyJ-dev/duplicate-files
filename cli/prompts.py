@@ -26,19 +26,42 @@ def prompt_yes_no(question: str) -> bool:
         print("Please enter y or n.")
 
 
+def prompt_dry_run_first() -> bool:
+    """Ask the user if they want to preview changes with a dry run before acting."""
+    return prompt_yes_no("Would you like to perform a dry run first to preview the changes?")
+
+
+def prompt_proceed_with_action() -> bool:
+    """Ask the user, after seeing a dry run preview, if they want to proceed with an action."""
+    return prompt_yes_no("Would you like to proceed with an action now?")
+
+
 def prompt_save_csv() -> bool:
     """Ask the user if they want to save the results to a CSV file."""
     return prompt_yes_no("Do you want to save the results to a CSV file?")
 
 
-def prompt_csv_path() -> str:
-    """Ask the user for a CSV output file path."""
+def prompt_csv_path(default_path: Path) -> Path:
+    """
+    Ask the user for a CSV output file path.
+    Empty input uses default_path. A path not ending in .csv gets the
+    extension appended automatically.
+    """
     try:
-        path = input("Enter output path (e.g. /output/report.csv): ").strip()
+        raw = input(f"Enter output path (leave empty for default: {default_path}): ").strip()
     except (KeyboardInterrupt, EOFError):
         print()
         logger.info("Input interrupted. Exiting.")
         sys.exit(0)
+
+    if raw == "":
+        logger.info(f"No path entered. Using default: {default_path}")
+        return default_path
+
+    path = Path(raw)
+    if path.suffix.lower() != '.csv':
+        path = path.with_suffix('.csv')
+        logger.warning(f"Output path did not end in .csv. Using: {path}")
     return path
 
 
@@ -74,12 +97,17 @@ def prompt_action() -> str:
         print("Please enter d, r, or s.")
 
 
-def prompt_relocate_path() -> Path:
-    """Ask the user for a staging folder path."""
+def prompt_relocate_path(default_path: Path) -> Path:
+    """Ask the user for a staging folder path. Empty input uses default_path."""
     try:
-        path = input("Enter staging folder path: ").strip()
+        raw = input(f"Enter staging folder path (leave empty for default: {default_path}): ").strip()
     except (KeyboardInterrupt, EOFError):
         print()
         logger.info("Input interrupted. Exiting.")
         sys.exit(0)
-    return Path(path)
+
+    if raw == "":
+        logger.info(f"No path entered. Using default: {default_path}")
+        return default_path
+
+    return Path(raw)
