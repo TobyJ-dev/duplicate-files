@@ -3,6 +3,10 @@
 A command-line tool to find and optionally remove duplicate files,
 with support for images, video, and music files.
 
+## Screenshot
+
+![CLI Example](cli/logo_screenshot.png)
+
 ## Features
 
 - Recursive directory scan
@@ -13,6 +17,15 @@ with support for images, video, and music files.
 - Safe staging mode (move duplicates to a folder) or permanent deletion
 - Full logging of every run, plus a dedicated log of every file deleted or moved
 - Interactive prompts when run without flags, fully scriptable with flags
+
+## Safety
+
+Always run with:
+```
+--dry-run
+```
+before deleting files.
+The tool identifies duplicates using content hashes, not filenames.
 
 ## Requirements
 

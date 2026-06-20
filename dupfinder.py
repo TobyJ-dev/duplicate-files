@@ -212,6 +212,8 @@ def scan_directory(directory: Path, extensions: set) -> tuple[list[Path], list[P
 def find_duplicates(file_list: list[Path]) -> dict[str, list[Path]]:
     hash_map: dict[str, list[Path]] = {}
 
+    logger.info(f"Starting hashing {len(file_list)} file(s). This may take several minutes...")
+
     for filepath in tqdm(file_list, desc="Hashing files", unit="file"):
         file_hash = hash_file(filepath)
         if file_hash is None:
@@ -223,8 +225,11 @@ def find_duplicates(file_list: list[Path]) -> dict[str, list[Path]]:
     duplicates = {h: paths for h, paths in hash_map.items() if len(paths) > 1}
 
     total_duplicate_files = sum(len(paths) for paths in duplicates.values())
+    logger.info("-" * 70)
+    logger.info(f"Hashing complete.")
     logger.info(f"Duplicate groups found: {len(duplicates)}")
     logger.info(f"Total files with duplicates: {total_duplicate_files}")
+    logger.info("-" * 70)
 
     return duplicates
 
@@ -237,29 +242,53 @@ def save_report(
     duplicates: dict[str, list[Path]],
     skipped_files: list[Path],
     output_path: Path
-) -> None:
+) -> float:                          # now returns total_mb_freed
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_bytes_freed = 0
+
     try:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['group_hash', 'filepath', 'filename', 'extension', 'size_bytes'])
+            writer.writerow([
+                'filename', 'size_bytes', 'size_mb',
+                'path', 'extension', 'group_hash', 'status'
+            ])
+
             for file_hash, paths in duplicates.items():
-                for filepath in paths:
+                sorted_paths = sorted(paths)
+                for i, filepath in enumerate(sorted_paths):
+                    status = 'keep' if i == 0 else 'delete'
                     try:
-                        size = filepath.stat().st_size
+                        size_bytes = filepath.stat().st_size
                     except OSError:
-                        size = -1
+                        size_bytes = -1
+
+                    size_mb = round(size_bytes / (1024 * 1024), 4) if size_bytes >= 0 else -1
+
+                    if status == 'delete' and size_bytes >= 0:
+                        total_bytes_freed += size_bytes
+
                     writer.writerow([
-                        file_hash,
-                        str(filepath),
                         filepath.name,
+                        size_bytes,
+                        size_mb,
+                        str(filepath),
                         filepath.suffix.lower(),
-                        size,
+                        file_hash,
+                        status,
                     ])
-        logger.info(f"Duplicate report saved to: {output_path}")
+
+            total_mb_freed = round(total_bytes_freed / (1024 * 1024), 2)
+            writer.writerow([])
+            writer.writerow([
+                f'You would free {total_mb_freed} MB by deleting these duplicates',
+                '', '', '', '', '', ''
+            ])
+
     except OSError as e:
         logger.error(f"Could not write duplicate report: {e}")
-        return
+        return 0.0
 
     if skipped_files:
         skipped_path = output_path.parent / 'skipped_files.csv'
@@ -273,9 +302,10 @@ def save_report(
                         filepath.name,
                         filepath.suffix.lower(),
                     ])
-            logger.info(f"Skipped files report saved to: {skipped_path}")
         except OSError as e:
             logger.error(f"Could not write skipped files report: {e}")
+
+    return total_mb_freed
 
 
 # ---------------------------------------------------------------------------
@@ -480,13 +510,23 @@ def main() -> None:
     if args.dry_run:
         show_dry_run_preview(duplicates)
         if args.output:
-            save_report(duplicates, skipped_files, args.output)
+            mb_freed = save_report(duplicates, skipped_files, output_path)
+            logger.info("=" * 70)
+            logger.info(f"Report saved to:            {output_path}")
+            logger.info(f"Skipped files saved to:     {output_path.parent / 'skipped_files.csv'}")
+            logger.info(f"Potential space to free:    {mb_freed} MB")
+            logger.info("=" * 70)
         return
 
     # --delete or --relocate flag: explicit action, fully scripted aside from the safety confirm
     if args.delete or args.relocate is not None:
         output_path = args.output if args.output else DEFAULT_OUTPUT_PATH
-        save_report(duplicates, skipped_files, output_path)
+        mb_freed = save_report(duplicates, skipped_files, output_path)
+        logger.info("=" * 70)
+        logger.info(f"Report saved to:            {output_path}")
+        logger.info(f"Skipped files saved to:     {output_path.parent / 'skipped_files.csv'}")
+        logger.info(f"Potential space to free:    {mb_freed} MB")
+        logger.info("=" * 70)
         total_to_act_on = sum(len(paths) - 1 for paths in duplicates.values())
 
         if args.delete:
@@ -510,7 +550,12 @@ def main() -> None:
 
     # --output flag only: save and exit, no action menu
     if args.output:
-        save_report(duplicates, skipped_files, args.output)
+        mb_freed = save_report(duplicates, skipped_files, args.output)
+        logger.info("=" * 70)
+        logger.info(f"Report saved to:            {args.output}")
+        logger.info(f"Skipped files saved to:     {args.output.parent / 'skipped_files.csv'}")
+        logger.info(f"Potential space to free:    {mb_freed} MB")
+        logger.info("=" * 70)
         return
 
     # no relevant flags at all: full interactive flow
