@@ -39,7 +39,8 @@ DEFAULT_OUTPUT_PATH = SCRIPT_ROOT / "output" / "duplicates_report.csv"
 DEFAULT_LOGS_DIR = SCRIPT_ROOT / "logs"
 DEFAULT_STAGING_FOLDER_NAME = "duplicates"
 # RELOCATE_DEFAULT_SENTINEL = "__USE_DEFAULT__"
-RELOCATE_DEFAULT_SENTINEL = None
+# RELOCATE_DEFAULT_SENTINEL = None
+RELOCATE_DEFAULT_SENTINEL = object()  # unique sentinel value that cannot be confused with a real path
 
 PLAIN_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 PLAIN_LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
@@ -125,17 +126,16 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help='Simulate the scan without moving or deleting any files.'
     )
-
+    
     parser.add_argument(
-        '--relocate',
-        nargs='?',
-        const=RELOCATE_DEFAULT_SENTINEL,
-        default=None,
-        type=Path,
-        metavar='PATH',
-        help='Move duplicate files to a staging folder instead of deleting them.\n'
-             'If used without a value, defaults to <directory>/duplicates.'
-    )
+            '--relocate',
+            nargs='?',
+            const=RELOCATE_DEFAULT_SENTINEL,
+            default=None,
+            metavar='PATH',
+            help='Move duplicate files to a staging folder instead of deleting them.\n'
+                'If used without a value, defaults to <directory>/duplicates.'
+        )
     
     parser.add_argument(
         '--load-report',
@@ -490,12 +490,9 @@ def _relocate_file_list(file_list: list[Path], relocate_path: Path) -> None:
 
 
 def resolve_relocate_path(args: argparse.Namespace) -> Path:
-    """Turn args.relocate into a real Path, applying the default staging folder if needed."""
-    # if args.relocate == RELOCATE_DEFAULT_SENTINEL:
-    if args.relocate is None:
+    if args.relocate is RELOCATE_DEFAULT_SENTINEL:
         return args.directory / DEFAULT_STAGING_FOLDER_NAME
-    return args.relocate
-
+    return Path(args.relocate)
 
 # ---------------------------------------------------------------------------
 # Logging setup helpers
